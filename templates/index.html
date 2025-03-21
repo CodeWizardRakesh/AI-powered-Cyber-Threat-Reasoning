@@ -23,11 +23,11 @@
             <pre>{{ high_risk_events }}</pre>
 
             <h2>🔹 AI-Generated Cyber Threat Report:</h2>
-            <div id="threat-report" class="report-output"></div>
-            <script>
-                // Pass filename to JavaScript
-                const filename = "{{ filename }}";
-            </script>
+            <div id="threat-report" class="report-output">
+                <div id="summary" class="report-section"><strong>Summary:</strong></div>
+                <div id="patterns" class="report-section"><strong>Threat Patterns:</strong></div>
+                <div id="actions" class="report-section"><strong>Recommended Actions:</strong></div>
+            </div>
         </div>
         {% endif %}
     </div>

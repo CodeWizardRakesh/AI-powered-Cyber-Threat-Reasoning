@@ -3,6 +3,7 @@ import pandas as pd
 import google.generativeai as genai
 from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
 import time
+import json
 
 # Configure Gemini API
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -60,16 +61,35 @@ def generate_threat_report(df):
         print(f"Error generating report: {e}")
         return "Error: Failed to generate report."
 
-# Stream the report generation word-by-word
+# Stream the report in a structured format
 def stream_threat_report(df):
-    """Streams the threat report word-by-word."""
+    """Streams the threat report in structured form word-by-word."""
     report = generate_threat_report(df)
-    if not report:
+    if not report or "Error" in report:
         yield "data: Error generating report.\n\n"
         return
-    words = report.split()
+
+    try:
+        # Parse JSON response
+        report_data = json.loads(report)
+        summary = report_data.get("Summary", "No summary provided.")
+        patterns = report_data.get("Threat Patterns", "No patterns identified.")
+        actions = report_data.get("Recommended Actions", "No actions recommended.")
+
+        # Structure the report
+        structured_report = (
+            "Summary:\n" + summary + "\n\n" +
+            "Threat Patterns:\n" + patterns + "\n\n" +
+            "Recommended Actions:\n" + actions
+        )
+    except json.JSONDecodeError:
+        # Fallback if JSON parsing fails
+        structured_report = "Raw Report:\n" + report
+
+    # Stream word-by-word
+    words = structured_report.split()
     for word in words:
-        yield f"data: {word} \n\n"  # SSE format
+        yield f"data: {word} \n\n"
         time.sleep(0.1)  # Simulate word-by-word generation
 
 @app.route("/", methods=["GET", "POST"])
@@ -84,7 +104,7 @@ def index():
             return render_template("index.html", 
                                    event_counts=event_counts,
                                    high_risk_events=high_risk_events,
-                                   filename=file.filename)  # Pass filename to template
+                                   filename=file.filename)
     return render_template("index.html")
 
 @app.route("/stream-report")

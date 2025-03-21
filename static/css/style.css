@@ -57,3 +57,11 @@ pre {
     white-space: pre-wrap;
     word-wrap: break-word;
 }
+
+.report-section {
+    margin-bottom: 10px;
+}
+
+.report-section strong {
+    color: #00cc00; /* Slightly darker green for emphasis */
+}

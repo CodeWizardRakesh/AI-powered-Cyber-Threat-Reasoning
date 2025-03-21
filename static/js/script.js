@@ -33,19 +33,49 @@ document.addEventListener("DOMContentLoaded", function() {
     // Stream the threat report if filename is available
     const reportDiv = document.getElementById("threat-report");
     if (reportDiv && typeof filename !== "undefined" && filename) {
-        console.log("Streaming report for filename:", filename); // Debug
+        console.log("Streaming report for filename:", filename);
         const eventSource = new EventSource(`/stream-report?filename=${encodeURIComponent(filename)}`);
-        reportDiv.innerHTML = ""; // Clear previous content
+        
+        let currentSection = "summary"; // Start with summary
+        const summaryDiv = document.getElementById("summary");
+        const patternsDiv = document.getElementById("patterns");
+        const actionsDiv = document.getElementById("actions");
 
         eventSource.onmessage = function(event) {
-            console.log("Received data:", event.data); // Debug
-            reportDiv.innerHTML += event.data + " "; // Append word with space
+            console.log("Received data:", event.data);
+            const word = event.data.trim();
+
+            // Switch sections based on keywords
+            if (word === "Summary:") {
+                currentSection = "summary";
+                return; // Skip the label itself
+            } else if (word === "Threat") {
+                currentSection = "patterns";
+                return; // Skip "Threat" (next word is "Patterns:")
+            } else if (word === "Patterns:") {
+                return; // Skip "Patterns:"
+            } else if (word === "Recommended") {
+                currentSection = "actions";
+                return; // Skip "Recommended" (next word is "Actions:")
+            } else if (word === "Actions:") {
+                return; // Skip "Actions:"
+            }
+
+            // Append word to the correct section
+            if (currentSection === "summary") {
+                summaryDiv.innerHTML += ` ${word}`;
+            } else if (currentSection === "patterns") {
+                patternsDiv.innerHTML += ` ${word}`;
+            } else if (currentSection === "actions") {
+                actionsDiv.innerHTML += ` ${word}`;
+            }
+
             reportDiv.scrollTop = reportDiv.scrollHeight; // Auto-scroll
         };
 
         eventSource.onerror = function() {
-            console.log("Stream ended or error occurred"); // Debug
-            reportDiv.innerHTML += "\n[Report generation complete]";
+            console.log("Stream ended or error occurred");
+            reportDiv.innerHTML += "<p>[Report generation complete]</p>";
             eventSource.close();
         };
     }

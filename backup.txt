@@ -1,0 +1,264 @@
+import os
+import pandas as pd
+import google.generativeai as genai
+from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
+import time
+
+# Configure Gemini API
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+model = genai.GenerativeModel("gemini-1.5-flash")
+
+app = Flask(__name__)
+app.config["UPLOAD_FOLDER"] = "uploads"
+os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
+
+# **Step 1: Load and Preprocess Data**
+def load_and_preprocess_data(file_path):
+    """Loads the CSV file and preprocesses it."""
+    try:
+        df = pd.read_csv(file_path)
+        df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+        df.drop_duplicates(inplace=True)
+        df.dropna(inplace=True)
+        return df
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        return None
+
+# **Step 2: Perform Threat Analysis**
+def analyze_threats(df):
+    """Analyzes the threat logs for high-risk events."""
+    if df is None or isinstance(df, str):
+        return None, None
+    event_counts = df["Source IP"].value_counts().head(5).to_dict()
+    high_risk_events = df[df["Severity"].isin(["High", "Critical"])]
+    return event_counts, high_risk_events.to_dict(orient="records")
+
+# **Step 3: Generate LLM-Based Cybersecurity Report**
+def generate_threat_report(df):
+    """Sends structured logs to Gemini LLM for reasoning and decision-making."""
+    if df is None or isinstance(df, str):
+        return "Error: No valid data to analyze."
+    log_text = df.head(5).to_string(index=False)
+    prompt = f"""
+    Given the following cybersecurity logs, analyze potential threats and suggest security actions.
+
+    Logs:
+    {log_text}
+
+    Instructions:
+    1. Summarize key threats in simple terms.
+    2. Identify patterns (brute-force attacks, malware, port scans, etc.).
+    3. Recommend security actions (e.g., block IP, notify security team, increase firewall rules).
+
+    Respond in JSON format with fields: "Summary", "Threat Patterns", "Recommended Actions".
+    """
+    try:
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        print(f"Error generating report: {e}")
+        return "Error: Failed to generate report."
+
+# Stream the report generation word-by-word
+def stream_threat_report(df):
+    """Streams the threat report word-by-word."""
+    report = generate_threat_report(df)
+    if not report:
+        yield "data: Error generating report.\n\n"
+        return
+    words = report.split()
+    for word in words:
+        yield f"data: {word} \n\n"  # SSE format
+        time.sleep(0.1)  # Simulate word-by-word generation
+
+@app.route("/", methods=["GET", "POST"])
+def index():
+    if request.method == "POST":
+        file = request.files["file"]
+        if file:
+            file_path = os.path.join(app.config["UPLOAD_FOLDER"], file.filename)
+            file.save(file_path)
+            df = load_and_preprocess_data(file_path)
+            event_counts, high_risk_events = analyze_threats(df)
+            return render_template("index.html", 
+                                   event_counts=event_counts,
+                                   high_risk_events=high_risk_events,
+                                   filename=file.filename)  # Pass filename to template
+    return render_template("index.html")
+
+@app.route("/stream-report")
+def stream_report():
+    filename = request.args.get("filename")
+    if not filename:
+        return Response("data: No filename provided.\n\n", mimetype="text/event-stream")
+    file_path = os.path.join(app.config["UPLOAD_FOLDER"], filename)
+    df = load_and_preprocess_data(file_path)
+    return Response(stream_threat_report(df), mimetype="text/event-stream")
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+
+
+style.css:
+
+@import url('https://fonts.googleapis.com/css2?family=Orbitron&display=swap');
+
+body {
+    background-color: #0d1117;
+    color: #00ff00;
+    font-family: 'Orbitron', sans-serif;
+    text-align: center;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    width: 60%;
+    margin: auto;
+    padding: 20px;
+    border: 2px solid #00ff00;
+    background-color: #000;
+    box-shadow: 0px 0px 10px #00ff00;
+}
+
+h1, h2 {
+    color: #00ff00;
+    text-shadow: 0px 0px 5px #00ff00;
+}
+
+button {
+    background-color: black;
+    color: #00ff00;
+    border: 2px solid #00ff00;
+    padding: 10px 20px;
+    font-size: 1.2em;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+button:hover {
+    background-color: #00ff00;
+    color: black;
+}
+
+pre {
+    text-align: left;
+    background: #111;
+    padding: 10px;
+    border: 1px solid #00ff00;
+    overflow-x: auto;
+}
+
+.report-output {
+    text-align: left;
+    background: #111;
+    padding: 10px;
+    border: 1px solid #00ff00;
+    min-height: 100px;
+    max-height: 300px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+
+script.js:
+
+document.addEventListener("DOMContentLoaded", function() {
+    let commandInput = document.getElementById("command");
+    let outputDiv = document.getElementById("output");
+
+    if (commandInput) {
+        commandInput.addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                let command = commandInput.value.trim();
+                if (command) {
+                    outputDiv.innerHTML += `<p>> ${command}</p>`;
+                    processCommand(command);
+                }
+                commandInput.value = "";
+                outputDiv.scrollTop = outputDiv.scrollHeight;
+            }
+        });
+    }
+
+    function processCommand(command) {
+        let response = "";
+        if (command.toLowerCase() === "status") {
+            response = "System Operational. Threat Level: LOW.";
+        } else if (command.toLowerCase() === "scan") {
+            response = "Scanning network for anomalies...";
+        } else if (command.toLowerCase() === "exit") {
+            response = "Terminating session...";
+        } else {
+            response = "Unknown command.";
+        }
+        outputDiv.innerHTML += `<p>${response}</p>`;
+    }
+
+    // Stream the threat report if filename is available
+    const reportDiv = document.getElementById("threat-report");
+    if (reportDiv && typeof filename !== "undefined" && filename) {
+        console.log("Streaming report for filename:", filename); // Debug
+        const eventSource = new EventSource(`/stream-report?filename=${encodeURIComponent(filename)}`);
+        reportDiv.innerHTML = ""; // Clear previous content
+
+        eventSource.onmessage = function(event) {
+            console.log("Received data:", event.data); // Debug
+            reportDiv.innerHTML += event.data + " "; // Append word with space
+            reportDiv.scrollTop = reportDiv.scrollHeight; // Auto-scroll
+        };
+
+        eventSource.onerror = function() {
+            console.log("Stream ended or error occurred"); // Debug
+            reportDiv.innerHTML += "\n[Report generation complete]";
+            eventSource.close();
+        };
+    }
+});	
+
+
+index.html:
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Threat Reasoning</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🛡 AI-Powered Cyber Threat Reasoning</h1>
+        <form method="POST" enctype="multipart/form-data" id="upload-form">
+            <input type="file" name="file" required>
+            <button type="submit">Analyze Threats</button>
+        </form>
+
+        {% if event_counts %}
+        <div class="output">
+            <h2>🔹 Top Threat Sources:</h2>
+            <pre>{{ event_counts }}</pre>
+
+            <h2>🔹 High-Risk Events:</h2>
+            <pre>{{ high_risk_events }}</pre>
+
+            <h2>🔹 AI-Generated Cyber Threat Report:</h2>
+            <div id="threat-report" class="report-output"></div>
+            <script>
+                // Pass filename to JavaScript
+                const filename = "{{ filename }}";
+            </script>
+        </div>
+        {% endif %}
+    </div>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>
+
+
+
+
