@@ -51,7 +51,7 @@ def generate_threat_report(df):
     2. Identify patterns (brute-force attacks, malware, port scans, etc.).
     3. Recommend security actions (e.g., block IP, notify security team, increase firewall rules).
 
-    Respond in JSON format with fields: "Summary", "Threat Patterns", "Recommended Actions".
+    Respond with fields: "Summary", "Threat Patterns", "Recommended Actions".
     """
     try:
         response = model.generate_content(prompt)

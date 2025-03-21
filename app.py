@@ -3,7 +3,7 @@ import pandas as pd
 import google.generativeai as genai
 from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
 import time
-import json
+import re
 
 # Configure Gemini API
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -52,44 +52,70 @@ def generate_threat_report(df):
     2. Identify patterns (brute-force attacks, malware, port scans, etc.).
     3. Recommend security actions (e.g., block IP, notify security team, increase firewall rules).
 
-    Respond in JSON format with fields: "Summary", "Threat Patterns", "Recommended Actions".
+    Respond with fields clearly labeled as:
+    "**Summary:** <your summary>"
+    "**Threat Patterns:** <your patterns>"
+    "**Recommended Actions:** <your actions>"
     """
     try:
         response = model.generate_content(prompt)
+        print(f"Raw Gemini response:\n{repr(response.text)}")  # Debug with repr()
         return response.text
     except Exception as e:
         print(f"Error generating report: {e}")
         return "Error: Failed to generate report."
 
-# Stream the report in a structured format
+# Stream the report with sections separated by delimiters
 def stream_threat_report(df):
-    """Streams the threat report in structured form word-by-word."""
+    """Streams the threat report word-by-word with section delimiters."""
     report = generate_threat_report(df)
     if not report or "Error" in report:
         yield "data: Error generating report.\n\n"
         return
 
-    try:
-        # Parse JSON response
-        report_data = json.loads(report)
-        summary = report_data.get("Summary", "No summary provided.")
-        patterns = report_data.get("Threat Patterns", "No patterns identified.")
-        actions = report_data.get("Recommended Actions", "No actions recommended.")
+    # Parse the plain text response with Markdown headers
+    summary = "No summary provided."
+    patterns = "No patterns identified."
+    actions = "No actions recommended."
 
-        # Structure the report
-        structured_report = (
-            "Summary:\n" + summary + "\n\n" +
-            "Threat Patterns:\n" + patterns + "\n\n" +
-            "Recommended Actions:\n" + actions
-        )
-    except json.JSONDecodeError:
-        # Fallback if JSON parsing fails
-        structured_report = "Raw Report:\n" + report
+    lines = report.splitlines()
+    current_section = None
+    for line in lines:
+        line = line.strip()
+        if re.match(r"\*\*Summary:\*\*.*", line, re.IGNORECASE):
+            current_section = "summary"
+            summary = line[len("**Summary:**"):].strip()
+        elif re.match(r"\*\*Threat Patterns:\*\*.*", line, re.IGNORECASE):
+            current_section = "patterns"
+            patterns = line[len("**Threat Patterns:**"):].strip()
+        elif re.match(r"\*\*Recommended Actions:\*\*.*", line, re.IGNORECASE):
+            current_section = "actions"
+            actions = line[len("**Recommended Actions:**"):].strip()
+        elif current_section and line:
+            # Append additional lines to the current section
+            if current_section == "summary":
+                summary += " " + line
+            elif current_section == "patterns":
+                patterns += " " + line
+            elif current_section == "actions":
+                actions += " " + line
+
+    # If no content was found, log the issue
+    if summary == "No summary provided." and patterns == "No patterns identified." and actions == "No actions recommended.":
+        print("Warning: No content parsed from Gemini response.")
+
+    # Structure the report with delimiters
+    structured_report = (
+        "SUMMARY_START " + summary + " SUMMARY_END " +
+        "PATTERNS_START " + patterns + " PATTERNS_END " +
+        "ACTIONS_START " + actions + " ACTIONS_END"
+    )
+    print(f"Structured report: {structured_report}")  # Debug structured output
 
     # Stream word-by-word
     words = structured_report.split()
     for word in words:
-        yield f"data: {word} \n\n"
+        yield f"data: {word}\n\n"
         time.sleep(0.1)  # Simulate word-by-word generation
 
 @app.route("/", methods=["GET", "POST"])

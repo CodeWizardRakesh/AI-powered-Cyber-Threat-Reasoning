@@ -36,38 +36,37 @@ document.addEventListener("DOMContentLoaded", function() {
         console.log("Streaming report for filename:", filename);
         const eventSource = new EventSource(`/stream-report?filename=${encodeURIComponent(filename)}`);
         
-        let currentSection = "summary"; // Start with summary
+        let currentSection = null;
         const summaryDiv = document.getElementById("summary");
         const patternsDiv = document.getElementById("patterns");
         const actionsDiv = document.getElementById("actions");
 
         eventSource.onmessage = function(event) {
-            console.log("Received data:", event.data);
             const word = event.data.trim();
+            console.log("Received data:", word); // Debug
 
-            // Switch sections based on keywords
-            if (word === "Summary:") {
+            // Switch sections based on delimiters
+            if (word === "SUMMARY_START") {
                 currentSection = "summary";
-                return; // Skip the label itself
-            } else if (word === "Threat") {
+            } else if (word === "SUMMARY_END") {
+                currentSection = null;
+            } else if (word === "PATTERNS_START") {
                 currentSection = "patterns";
-                return; // Skip "Threat" (next word is "Patterns:")
-            } else if (word === "Patterns:") {
-                return; // Skip "Patterns:"
-            } else if (word === "Recommended") {
+            } else if (word === "PATTERNS_END") {
+                currentSection = null;
+            } else if (word === "ACTIONS_START") {
                 currentSection = "actions";
-                return; // Skip "Recommended" (next word is "Actions:")
-            } else if (word === "Actions:") {
-                return; // Skip "Actions:"
-            }
-
-            // Append word to the correct section
-            if (currentSection === "summary") {
-                summaryDiv.innerHTML += ` ${word}`;
-            } else if (currentSection === "patterns") {
-                patternsDiv.innerHTML += ` ${word}`;
-            } else if (currentSection === "actions") {
-                actionsDiv.innerHTML += ` ${word}`;
+            } else if (word === "ACTIONS_END") {
+                currentSection = null;
+            } else if (currentSection) {
+                // Append word to the current section
+                if (currentSection === "summary") {
+                    summaryDiv.innerHTML += ` ${word}`;
+                } else if (currentSection === "patterns") {
+                    patternsDiv.innerHTML += ` ${word}`;
+                } else if (currentSection === "actions") {
+                    actionsDiv.innerHTML += ` ${word}`;
+                }
             }
 
             reportDiv.scrollTop = reportDiv.scrollHeight; // Auto-scroll
@@ -75,7 +74,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
         eventSource.onerror = function() {
             console.log("Stream ended or error occurred");
-            reportDiv.innerHTML += "<p>[Report generation complete]</p>";
+            reportDiv.innerHTML += "\n[Report generation complete]";
             eventSource.close();
         };
     }
