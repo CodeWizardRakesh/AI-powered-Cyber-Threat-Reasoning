@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cyber Threat Reasoning</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🛡 AI-Powered Cyber Threat Reasoning</h1>
+        <form method="POST" enctype="multipart/form-data" id="upload-form">
+            <input type="file" name="file" required>
+            <button type="submit">Analyze Threats</button>
+        </form>
+
+        {% if event_counts %}
+        <div class="output">
+            <h2>🔹 Top Threat Sources:</h2>
+            <pre>{{ event_counts }}</pre>
+
+            <h2>🔹 High-Risk Events:</h2>
+            <pre>{{ high_risk_events }}</pre>
+
+            <h2>🔹 AI-Generated Cyber Threat Report:</h2>
+            <div id="threat-report" class="report-output"></div>
+            <script>
+                // Pass filename to JavaScript
+                const filename = "{{ filename }}";
+            </script>
+        </div>
+        {% endif %}
+    </div>
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

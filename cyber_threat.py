@@ -103,3 +103,4 @@ if __name__ == "__main__":
     # Save report if generated
     if threat_report:
         save_report(threat_report)
+  
