@@ -32,6 +32,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
     // Stream the threat report if filename is available
     const reportDiv = document.getElementById("threat-report");
+    const downloadBtn = document.getElementById("download-btn");
     if (reportDiv && typeof filename !== "undefined" && filename) {
         console.log("Streaming report for filename:", filename);
         const eventSource = new EventSource(`/stream-report?filename=${encodeURIComponent(filename)}`);
@@ -43,7 +44,7 @@ document.addEventListener("DOMContentLoaded", function() {
 
         eventSource.onmessage = function(event) {
             const word = event.data.trim();
-            console.log("Received data:", word); // Debug
+            console.log("Received data:", word);
 
             // Switch sections based on delimiters
             if (word === "SUMMARY_START") {
@@ -75,6 +76,7 @@ document.addEventListener("DOMContentLoaded", function() {
         eventSource.onerror = function() {
             console.log("Stream ended or error occurred");
             reportDiv.innerHTML += "\n[Report generation complete]";
+            downloadBtn.style.display = "block"; // Show download button
             eventSource.close();
         };
     }

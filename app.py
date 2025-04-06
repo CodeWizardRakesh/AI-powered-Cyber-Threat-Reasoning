@@ -1,9 +1,11 @@
 import os
 import pandas as pd
 import google.generativeai as genai
-from flask import Flask, render_template, request, redirect, url_for, jsonify, Response
+from flask import Flask, render_template, request, redirect, url_for, jsonify, Response, send_file
 import time
 import re
+from docx import Document
+from io import BytesIO
 
 # Configure Gemini API
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -59,15 +61,36 @@ def generate_threat_report(df):
     """
     try:
         response = model.generate_content(prompt)
-        print(f"Raw Gemini response:\n{repr(response.text)}")  # Debug with repr()
+        print(f"Raw Gemini response:\n{repr(response.text)}")
         return response.text
     except Exception as e:
         print(f"Error generating report: {e}")
         return "Error: Failed to generate report."
 
-# Stream the report with sections separated by delimiters
+# Generate Word document
+def create_word_doc(summary, patterns, actions):
+    """Creates a Word document with the report sections."""
+    doc = Document()
+    doc.add_heading("AI-Generated Cyber Threat Report", 0)
+
+    doc.add_heading("Summary", level=1)
+    doc.add_paragraph(summary)
+
+    doc.add_heading("Threat Patterns", level=1)
+    doc.add_paragraph(patterns)
+
+    doc.add_heading("Recommended Actions", level=1)
+    doc.add_paragraph(actions)
+
+    # Save to a BytesIO object for in-memory handling
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer
+
+# Stream the report with sections separated by delimiters and store for Word doc
 def stream_threat_report(df):
-    """Streams the threat report word-by-word with section delimiters."""
+    """Streams the threat report word-by-word with section delimiters and prepares Word doc."""
     report = generate_threat_report(df)
     if not report or "Error" in report:
         yield "data: Error generating report.\n\n"
@@ -92,7 +115,6 @@ def stream_threat_report(df):
             current_section = "actions"
             actions = line[len("**Recommended Actions:**"):].strip()
         elif current_section and line:
-            # Append additional lines to the current section
             if current_section == "summary":
                 summary += " " + line
             elif current_section == "patterns":
@@ -100,7 +122,6 @@ def stream_threat_report(df):
             elif current_section == "actions":
                 actions += " " + line
 
-    # If no content was found, log the issue
     if summary == "No summary provided." and patterns == "No patterns identified." and actions == "No actions recommended.":
         print("Warning: No content parsed from Gemini response.")
 
@@ -110,13 +131,17 @@ def stream_threat_report(df):
         "PATTERNS_START " + patterns + " PATTERNS_END " +
         "ACTIONS_START " + actions + " ACTIONS_END"
     )
-    print(f"Structured report: {structured_report}")  # Debug structured output
+    print(f"Structured report: {structured_report}")
+
+    # Store the parsed sections in a global variable or session for download
+    global report_data
+    report_data = {"summary": summary, "patterns": patterns, "actions": actions}
 
     # Stream word-by-word
     words = structured_report.split()
     for word in words:
         yield f"data: {word}\n\n"
-        time.sleep(0.1)  # Simulate word-by-word generation
+        time.sleep(0.1)
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -142,5 +167,21 @@ def stream_report():
     df = load_and_preprocess_data(file_path)
     return Response(stream_threat_report(df), mimetype="text/event-stream")
 
+@app.route("/download-report")
+def download_report():
+    """Serves the generated report as a Word document."""
+    global report_data
+    if not report_data:
+        return "No report available for download.", 404
+
+    buffer = create_word_doc(report_data["summary"], report_data["patterns"], report_data["actions"])
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name="Cyber_Threat_Report.docx",
+        mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+
 if __name__ == "__main__":
+    report_data = None  # Global variable to store report data
     app.run(debug=True)
